@@ -123,6 +123,7 @@ void loop()
     {
       seconds -= 60; //Reset seconds and increment minutes
       minutes++;
+      
       if(minutes > 59)
       {
         minutes -= 60; //Reset minutes and increment hours
@@ -145,16 +146,17 @@ void loop()
           myservo.write(pos);              // tell servo to go to position in variable 'pos' 
           delay(100);                       // waits 15ms for the servo to reach the position 
         } 
-        for(pos = 180; pos>=1; pos-=1)     // goes from 180 degrees to 0 degrees 
+      for(pos = 180; pos>=1; pos--)     // goes from 180 degrees to 0 degrees 
         {                                
           myservo.write(pos);              // tell servo to go to position in variable 'pos' 
           delay(100);                       // waits 15ms for the servo to reach the position 
         } 
-      motorCount = 60;
-      motorCount--;
-      if(motorCount == 0){
-        motorOn;
+      for ( i = 0; i < 60; i++){  //loop through 60 times
+        if(i == 0){               // will only be true once
+          motorOn;                // its always on so this will never do anything.
+        }
       }
+      
     }
    /////////////////     snooze button     //////////////////////
     if(digitalRead(snooze) == LOW){
