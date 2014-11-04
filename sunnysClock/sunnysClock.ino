@@ -1,13 +1,20 @@
+#include <Servo.h>
 #include <SoftwareSerial.h>
 
 SoftwareSerial Serial7Segment(0, 13); //RX pin, TX pin
-
+Servo myservo;
 int cycles = 0;
-int AmLed = 9;
-int PmLed = 10;
-int HourBut = 2;
-int MinBut = 3;
-int SetAlarm = 4;
+int AmLed = 7;
+int PmLed = 8;
+int HourBut = A3;
+int MinBut = A2;
+int SetAlarmTime = A4;
+int alarmOnLed = A0;
+int snooze = 10;
+int alarmOnBut = A5;
+int alarmReset = A1;
+int snoozeCount;
+int pos = 0; 
 //From https://github.com/sparkfun/Serial7SegmentDisplay/wiki/Special-Commands#wiki-decimal
 #define APOSTROPHE  5
 #define COLON       4
@@ -22,45 +29,55 @@ byte minutes = 0;
 byte hours = 0;
 byte AlarmHrs = 0;
 byte AlarmMin = 0;
+byte motorCount = 0;
 boolean amTime = true;
 boolean AlarmamTime = true;
 boolean colonOn = false;
+boolean motorOn = false;
+boolean alarmOn = false;
 byte leds = 0;
 char time[100]; //Used for sprintf
 char alarmTime[100];
-int LedControl(){     //this function controls the leds
+char snoozeCountDown[100];
+char motorCountDown[100];
+void LedControl(){     //this function controls the leds
   if(hours == 12)
         {
           if(amTime == true) 
             {
               amTime = false; //Flip AM to PM
-            digitalWrite(AmLed, LOW); //turns off am led first
-            digitalWrite(PmLed, HIGH);// then turns on pm led
+              digitalWrite(AmLed, LOW); //turns off am led first
+              digitalWrite(PmLed, HIGH);// then turns on pm led
             }
             else
             {
-            amTime = true;
-            digitalWrite(PmLed, LOW); //turns off pm led first
-            digitalWrite(AmLed, HIGH);// then turns on am led
+              amTime = true;
+              digitalWrite(PmLed, LOW); //turns off pm led first
+              digitalWrite(AmLed, HIGH);// then turns on am led
             }
         }
 }
-int ALedControl(){
+void ALedControl(){
     if(AlarmHrs == 12)
         {
           if(AlarmamTime == true) 
             {
               AlarmamTime = false; //Flip AM to PM
-            digitalWrite(AmLed, LOW); //turns off am led first
-            digitalWrite(PmLed, HIGH);// then turns on pm led
+              digitalWrite(AmLed, LOW); //turns off am led first
+              digitalWrite(PmLed, HIGH);// then turns on pm led
             }
             else
             {
-            AlarmamTime = true;
-            digitalWrite(PmLed, LOW); //turns off pm led first
-            digitalWrite(AmLed, HIGH);// then turns on am led
+              AlarmamTime = true;
+              digitalWrite(PmLed, LOW); //turns off pm led first
+              digitalWrite(AmLed, HIGH);// then turns on am led
             }
         }
+}
+void alarmStart(){
+  if(hours == AlarmHrs && minutes == AlarmMin && amTime == AlarmamTime){
+    motorOn;
+  }
 }
 
 void setup() {
@@ -76,9 +93,14 @@ void setup() {
   pinMode(PmLed, OUTPUT);
   pinMode(HourBut, INPUT_PULLUP);  
   pinMode(MinBut, INPUT_PULLUP);
-  pinMode(SetAlarm, INPUT_PULLUP);
+  pinMode(SetAlarmTime, INPUT_PULLUP);
+  pinMode(alarmOnLed, OUTPUT);
+  pinMode(snooze, INPUT_PULLUP);
+  pinMode(alarmOnBut, INPUT_PULLUP);
+  pinMode(alarmReset, INPUT_PULLUP);
   millisTimer = millis();
   digitalWrite(AmLed, HIGH);
+//  myservo.attach(9);
   Serial7Segment.write(0x77);  // Decimal, colon, apostrophe control command
   Serial7Segment.write(1<<COLON); //keeps colon turned on
   //For testing, we initialize the variables to the current time
@@ -109,12 +131,46 @@ void loop()
         {
           hours -= 12; //Reset hours and flip AM/PM
         }
-      LedControl();//AM-PM leds
+        LedControl();//AM-PM leds
       }
     }
-  }
-
-  if (digitalRead(MinBut) == LOW && digitalRead(SetAlarm) == HIGH)
+  } //if (millis.. function ends here
+  
+  
+  /////////////////////// MOTOR CONTROL   //////////////////////
+    if(motorOn == true){
+      Serial.print("motor on");
+      for(pos = 0; pos < 180; pos += 1)    // goes from 0 degrees to 180 degrees 
+        {                                  // in steps of 1 degree 
+          myservo.write(pos);              // tell servo to go to position in variable 'pos' 
+          delay(100);                       // waits 15ms for the servo to reach the position 
+        } 
+        for(pos = 180; pos>=1; pos-=1)     // goes from 180 degrees to 0 degrees 
+        {                                
+          myservo.write(pos);              // tell servo to go to position in variable 'pos' 
+          delay(100);                       // waits 15ms for the servo to reach the position 
+        } 
+      motorCount = 60;
+      motorCount--;
+      if(motorCount == 0){
+        motorOn;
+      }
+    }
+   /////////////////     snooze button     //////////////////////
+    if(digitalRead(snooze) == LOW){
+      Serial.print("snooze button");
+      if(alarmOn == true){
+        motorOn = false;
+        snoozeCount = 300;
+        snoozeCount--;
+        if(snoozeCount == 0){
+          motorOn = true;
+        }
+      }
+    }
+  
+///////////////////  Hours and MInutes buttons /////////////////////////
+  if (digitalRead(MinBut) == LOW && digitalRead(SetAlarmTime) == HIGH)
   {
     minutes++;
     if(minutes > 59)
@@ -125,10 +181,10 @@ void loop()
         {
           hours -= 12; //Reset hours and flip AM/PM
         }
-      LedControl();//AM-PM leds
+        LedControl();//AM-PM leds
       }
   }
-  if (digitalRead(HourBut) == LOW && digitalRead(SetAlarm) == HIGH)
+  if (digitalRead(HourBut) == LOW && digitalRead(SetAlarmTime) == HIGH)
   {
     hours++;
     if(hours > 12)
@@ -137,10 +193,12 @@ void loop()
     }
     LedControl();//controlling AM-PM leds
   }
-  
-  if (digitalRead(SetAlarm) == LOW)
+/////////////////  Set Alarm Button   ///////////////////  
+  if (digitalRead(SetAlarmTime) == LOW)
     {
       Serial7Segment.print(alarmTime);
+      digitalWrite(AmLed, AlarmamTime);
+      digitalWrite(PmLed, !AlarmamTime);
       if(digitalRead(MinBut) == LOW)
       {
         AlarmMin++;
@@ -156,18 +214,47 @@ void loop()
         {
           AlarmHrs -= 12;
         }
-        ALedControl();
+          ALedControl();
       }
     }
-   if(digitalRead(SetAlarm) == HIGH)
+   else
         {
           sprintf(time, "%2d%02d", hours, minutes);
           Serial7Segment.print(time);
+          digitalWrite(AmLed, amTime);
+          digitalWrite(PmLed, !amTime);
         } 
+////////////////////////   alarm ON button     //////////////////////
+   if(digitalRead(alarmOnBut) == LOW){
+     if(alarmOn == true){
+       Serial.print("alarm OFF");
+       alarmOn = false;
+       digitalWrite(alarmOnLed, LOW);
+     }
+     else{
+       Serial.print("alarm ON");
+       alarmOn = true;
+       digitalWrite(alarmOnLed, HIGH);
+       alarmStart();
+     }
+   }
+/////////////////////////////////////////////////////////////
+//////////////////     alarm reset button   ////////////////
+   if(digitalRead(alarmReset) == LOW){
+     Serial.print("alarm reset");
+     if(alarmOn == true){
+       motorOn = false;
+       alarmStart();
+     }
+   }
   //Debug print the time
+//  sprintf(motorCountDown, "%02d", motorCount);
+//  sprintf(snoozeCountDown, "%02d", snoozeCount);
   sprintf(alarmTime, "%2d%02d", AlarmHrs, AlarmMin);
   sprintf(time, "HH:MM:SS %02d:%02d:%02d", hours, minutes, seconds);
   Serial.println(time);
+//  Serial.println(motorCountDown);
+//  Serial.println(snoozeCountDown);
 //  sprintf(time, "%2d%02d", hours, minutes); //change this to display different time format .
   //%2d removes zero in front on single digit numbers
 //  Serial7Segment.print(time); //Send serial string out the soft serial port to the S7S
