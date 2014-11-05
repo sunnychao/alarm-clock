@@ -151,12 +151,7 @@ void loop()
           myservo.write(pos);              // tell servo to go to position in variable 'pos' 
           delay(100);                       // waits 15ms for the servo to reach the position 
         } 
-      for ( i = 0; i < 60; i++){  //loop through 60 times
-        if(i == 0){               // will only be true once
-          motorOn;                // its always on so this will never do anything.
-        }
-      }
-      
+      motorOn = false;
     }
    /////////////////     snooze button     //////////////////////
     if(digitalRead(snooze) == LOW){
