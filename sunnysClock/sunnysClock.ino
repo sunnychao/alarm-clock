@@ -151,17 +151,17 @@ void loop()
           myservo.write(pos);              // tell servo to go to position in variable 'pos' 
           delay(100);                       // waits 15ms for the servo to reach the position 
         } 
-      motorOn = false;
+      motorOn = false;    // do I need to set it to false?
     }
    /////////////////     snooze button     //////////////////////
     if(digitalRead(snooze) == LOW){
       Serial.print("snooze button");
       if(alarmOn == true){
         motorOn = false;
-        snoozeCount = 300;
-        snoozeCount--;
-        if(snoozeCount == 0){
-          motorOn = true;
+        snoozeCount = 300;   //// this might not work.
+        snoozeCount--;          ////
+        if(snoozeCount == 0){      ////
+          motorOn = true;        ////
         }
       }
     }
