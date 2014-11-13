@@ -1,3 +1,6 @@
+#include <DS1307RTC.h>
+#include <Time.h>
+#include <Wire.h>
 #include <Servo.h>
 #include <SoftwareSerial.h>
 
@@ -40,27 +43,22 @@ char time[100]; //Used for sprintf
 char alarmTime[100];
 char snoozeCountDown[100];
 char motorCountDown[100];
+
 void LedControl(){     //this function controls the leds
-  if(hours == 12)
-        {
-          if(amTime == true) 
-            {
-              amTime = false; //Flip AM to PM
-              digitalWrite(AmLed, LOW); //turns off am led first
-              digitalWrite(PmLed, HIGH);// then turns on pm led
-            }
-            else
-            {
-              amTime = true;
-              digitalWrite(PmLed, LOW); //turns off pm led first
-              digitalWrite(AmLed, HIGH);// then turns on am led
-            }
-        }
+  if(isAM()){    
+      digitalWrite(PmLed, LOW); //turns off pm led first
+      digitalWrite(AmLed, HIGH);// then turns on am led
+  }
+  if(isPM()){
+    digitalWrite(AmLed, LOW); //turns off am led first
+    digitalWrite(PmLed, HIGH);// then turns on pm led         
+  }
 }
+              
 void ALedControl(){
     if(AlarmHrs == 12)
         {
-          if(AlarmamTime == true) 
+          if(AlarmamTime) 
             {
               AlarmamTime = false; //Flip AM to PM
               digitalWrite(AmLed, LOW); //turns off am led first
@@ -99,104 +97,90 @@ void setup() {
   pinMode(alarmOnBut, INPUT_PULLUP);
   pinMode(alarmReset, INPUT_PULLUP);
   millisTimer = millis();
-  digitalWrite(AmLed, HIGH);
+//  digitalWrite(AmLed, HIGH);
 //  myservo.attach(9);
   Serial7Segment.write(0x77);  // Decimal, colon, apostrophe control command
   Serial7Segment.write(1<<COLON); //keeps colon turned on
   //For testing, we initialize the variables to the current time
-  seconds = 55;
-  minutes = 59;
-  hours = 11;
+//  seconds = 55;
+//  minutes = 59;
+//  hours = 11;
   AlarmHrs = 10;
   AlarmMin = 10;
+  setSyncProvider(RTC.get);
+  setSyncInterval(60);
+  
+  if(timeStatus()!= timeSet)
+     Serial.println("Unable to sync with the RTC.");
+  else
+     Serial.println("RTC has been read.");
 }
 
 void loop() 
 {
-  //Every second update the various variables and blink colon/apos/decimal
-  if( (millis() - millisTimer) > 1000)
-  {
-    millisTimer += 1000; //Adjust the timer forward 1 second
-    
-    seconds++;
-    if(seconds > 59)
-    {
-      seconds -= 60; //Reset seconds and increment minutes
-      minutes++;
-      
-      if(minutes > 59)
-      {
-        minutes -= 60; //Reset minutes and increment hours
-        hours++;
-        if(hours > 12)
-        {
-          hours -= 12; //Reset hours and flip AM/PM
-        }
-        LedControl();//AM-PM leds
-      }
-    }
-  } //if (millis.. function ends here
-  
   
   /////////////////////// MOTOR CONTROL   //////////////////////
     if(motorOn == true){
-      Serial.print("motor on");
-      for(pos = 0; pos < 180; pos++ )    // goes from 0 degrees to 180 degrees 
+      Serial.println("motor on");
+      for(pos = 0; pos < 180; pos += 1)    // goes from 0 degrees to 180 degrees 
         {                                  // in steps of 1 degree 
           myservo.write(pos);              // tell servo to go to position in variable 'pos' 
           delay(100);                       // waits 15ms for the servo to reach the position 
         } 
-      for(pos = 180; pos>=1; pos--)     // goes from 180 degrees to 0 degrees 
+        for(pos = 180; pos>=1; pos-=1)     // goes from 180 degrees to 0 degrees 
         {                                
           myservo.write(pos);              // tell servo to go to position in variable 'pos' 
           delay(100);                       // waits 15ms for the servo to reach the position 
         } 
-      motorOn = false;    // do I need to set it to false?
+      motorCount = 60;
+      motorCount--;
+      if(motorCount == 0){
+        motorOn;
+      }
     }
-   /////////////////     snooze button     //////////////////////
+   /////////////////    
+  // snooze button     
+  //////////////////////
+  
     if(digitalRead(snooze) == LOW){
-      snoozeCount = 300;
-      Serial.print("snooze button");
+      Serial.println("snooze button");
       if(alarmOn == true){
         motorOn = false;
-           //// this might not work.
-        snoozeCount--;          ////
-        if(snoozeCount == 0){      ////
-          motorOn = true;        ////
+        snoozeCount = 300;
+        snoozeCount--;
+        if(snoozeCount == 0){
+          motorOn = true;
         }
       }
     }
   
-///////////////////  Hours and MInutes buttons /////////////////////////
+/////////////////// 
+//Hours and MInutes buttons
+/////////////////////////
   if (digitalRead(MinBut) == LOW && digitalRead(SetAlarmTime) == HIGH)
   {
-    minutes++;
-    if(minutes > 59)
-      {
-        minutes -= 60; //Reset minutes and increment hours 
-        hours++;
-        if(hours > 12)
-        {
-          hours -= 12; //Reset hours and flip AM/PM
-        }
-        LedControl();//AM-PM leds
-      }
+    adjustTime(60);                   
+    RTC.set(now());                   
+    Serial.println("Added a minute."); 
   }
   if (digitalRead(HourBut) == LOW && digitalRead(SetAlarmTime) == HIGH)
   {
-    hours++;
-    if(hours > 12)
-    {
-      hours -= 12; //Reset hours and flip AM/PM
-    }
-    LedControl();//controlling AM-PM leds
+    adjustTime(3600);
+    RTC.set(now());
+    Serial.println("added an hour");
+    
   }
-/////////////////  Set Alarm Button   ///////////////////  
+///////////////// 
+//Set Alarm Button  
+///////////////////  
+sprintf(alarmTime, "%2d%02d", AlarmHrs, AlarmMin);
   if (digitalRead(SetAlarmTime) == LOW)
     {
-      Serial7Segment.print(alarmTime);
       digitalWrite(AmLed, AlarmamTime);
       digitalWrite(PmLed, !AlarmamTime);
+      Serial.println("alarm time Button");
+      Serial7Segment.print(alarmTime);
+      
       if(digitalRead(MinBut) == LOW)
       {
         AlarmMin++;
@@ -210,49 +194,58 @@ void loop()
         AlarmHrs++;
         if(AlarmHrs > 12)
         {
-          AlarmHrs -= 12;
+          AlarmHrs -= 12; 
         }
           ALedControl();
-      }
-    }
+       }
+     }
    else
         {
-          sprintf(time, "%2d%02d", hours, minutes);
-          Serial7Segment.print(time);
-          digitalWrite(AmLed, amTime);
-          digitalWrite(PmLed, !amTime);
+          sprintf(time, "%2d%02d", hourFormat12(), minute());
+          Serial7Segment.print(time); //this line prints the time to display
+          digitalWrite(AmLed, isAM());
+          digitalWrite(PmLed, isPM());
+           LedControl();
         } 
-////////////////////////   alarm ON button     //////////////////////
+//////////////////////// 
+//alarm ON button    
+//////////////////////
    if(digitalRead(alarmOnBut) == LOW){
      if(alarmOn == true){
-       Serial.print("alarm OFF");
+       Serial.println("alarm OFF");
        alarmOn = false;
        digitalWrite(alarmOnLed, LOW);
      }
      else{
-       Serial.print("alarm ON");
+       Serial.println("alarm ON");
        alarmOn = true;
        digitalWrite(alarmOnLed, HIGH);
-       snoozeCount = 300;
        alarmStart();
      }
    }
-/////////////////////////////////////////////////////////////
-//////////////////     alarm reset button   ////////////////
+
+////////////////// 
+//alarm reset button   
+////////////////
    if(digitalRead(alarmReset) == LOW){
-     Serial.print("alarm reset");
+     Serial.println("alarm reset");
      if(alarmOn == true){
        motorOn = false;
        alarmStart();
-       snoozeCount = 300;
      }
    }
+  Serial.print(hour());
+  Serial.print(":");
+  Serial.print(minute());
+  Serial.print(":");
+  Serial.print(second());
+  Serial.println();
   //Debug print the time
 //  sprintf(motorCountDown, "%02d", motorCount);
 //  sprintf(snoozeCountDown, "%02d", snoozeCount);
-  sprintf(alarmTime, "%2d%02d", AlarmHrs, AlarmMin);
-  sprintf(time, "HH:MM:SS %02d:%02d:%02d", hours, minutes, seconds);
-  Serial.println(time);
+ 
+//  sprintf(time, "HH:MM:SS %02d:%02d:%02d", hours, minutes, seconds);
+//  Serial.println(time);
 //  Serial.println(motorCountDown);
 //  Serial.println(snoozeCountDown);
 //  sprintf(time, "%2d%02d", hours, minutes); //change this to display different time format .
